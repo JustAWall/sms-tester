@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/arch/sms-tester/venv/bin/python
 import requests
 import time
 import threading
